@@ -1,0 +1,141 @@
+name: Build OnePlus 8T OxygenOS 14 SukiSU + SUSFS (4.19)
+
+on:
+  push:
+    branches:
+      - main
+      - feat/kebab-anykernel3
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      kernel_branch:
+        description: "OnePlusOSS kernel source branch"
+        required: true
+        default: "oneplus/sm8250_u_14.0.0_op8t"
+        type: string
+      defconfig:
+        description: "Kernel defconfig"
+        required: true
+        default: "vendor/kona-perf_defconfig"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build kebab / SM8250
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache curl flex git libelf-dev libssl-dev lz4 python3 zip zstd
+      - name: Checkout kernel source
+        env:
+          KERNEL_BRANCH: ${{ inputs.kernel_branch || 'oneplus/sm8250_u_14.0.0_op8t' }}
+        run: |
+          git clone --depth=1 --branch "$KERNEL_BRANCH" https://github.com/OnePlusOSS/android_kernel_oneplus_sm8250.git kernel
+          test -f kernel/Makefile
+          grep -q 'PATCHLEVEL = 19' kernel/Makefile
+      - name: Install Neutron Clang
+        run: |
+          mkdir -p "$HOME/neutron-clang"
+          cd "$HOME/neutron-clang"
+          curl -LSs https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman -o antman
+          chmod +x antman
+          ./antman -S
+          echo "$HOME/neutron-clang/bin" >> "$GITHUB_PATH"
+      - name: Integrate SukiSU Ultra
+        working-directory: kernel
+        run: |
+          curl -LSs https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh | bash -s builtin
+          test -d KernelSU/kernel
+          test -L drivers/kernelsu
+      - name: Apply SUSFS 4.19 patches
+        working-directory: kernel
+        run: |
+          git clone --depth=1 --branch kernel-4.19 https://gitlab.com/simonpunk/susfs4ksu.git susfs
+          test -f susfs/kernel_patches/50_add_susfs_in_kernel-4.19.patch
+          # SukiSU Ultra's builtin branch already includes the KernelSU-side SUSFS
+          # integration. The legacy susfs4ksu patch also contains obsolete flat-layout
+          # KernelSU hunks, so apply only Linux-kernel hunks (fs/, include/, etc.).
+          cp susfs/kernel_patches/fs/susfs.c fs/
+          cp susfs/kernel_patches/include/linux/susfs.h include/linux/
+          cp susfs/kernel_patches/include/linux/sus_su.h include/linux/
+          awk '
+            /^diff --git / {
+              skip = ($0 ~ /^diff --git a\/kernel\//)
+            }
+            !skip { print }
+          ' susfs/kernel_patches/50_add_susfs_in_kernel-4.19.patch > susfs-kernel-only.patch
+          if grep -q '^diff --git a/kernel/' susfs-kernel-only.patch; then
+            echo "Legacy KernelSU hunks were not fully filtered" >&2
+            exit 1
+          fi
+          patch --batch --forward -p1 < susfs-kernel-only.patch
+      - name: Configure kernel
+        working-directory: kernel
+        env:
+          DEFCONFIG: ${{ inputs.defconfig || 'vendor/kona-perf_defconfig' }}
+        run: |
+          test -f "arch/arm64/configs/$DEFCONFIG"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          make "$DEFCONFIG"
+          scripts/config --enable KSU
+          scripts/config --enable KSU_SUSFS
+          scripts/config --enable KSU_SUSFS_HAS_MAGIC_MOUNT
+          scripts/config --enable KSU_MANUAL_HOOK
+          make olddefconfig
+          make -s kernelrelease
+      - name: Build kernel
+        working-directory: kernel
+        run: |
+          set -o pipefail
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          make -j"$(nproc --all)" Image.gz dtbs 2>&1 | tee ../build.log
+          test -s arch/arm64/boot/Image.gz
+      - name: Package with AnyKernel3
+        working-directory: kernel
+        run: |
+          git clone --depth=1 https://github.com/Numbersf/AnyKernel3.git ../AnyKernel3
+          cp arch/arm64/boot/Image.gz ../AnyKernel3/
+          if [ -d arch/arm64/boot/dts ]; then
+            find arch/arm64/boot/dts -type f \( -name '*.dtb' -o -name '*.dtbo' \) -exec cp --parents {} ../AnyKernel3/ \;
+          fi
+          cd ../AnyKernel3
+          sed -i 's/^do.devicecheck=1/do.devicecheck=0/' anykernel.sh
+          zip -r9 "../kebab-sukisu-susfs-4.19-AnyKernel3.zip" . -x '.git/*' 'README.md' '*.zip'
+          cd ..
+          test -s kebab-sukisu-susfs-4.19-AnyKernel3.zip
+      - name: Upload AnyKernel3 ZIP
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kebab-sukisu-susfs-4.19-AnyKernel3
+          path: kebab-sukisu-susfs-4.19-AnyKernel3.zip
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kebab-kernel-build-logs
+          path: |
+            build.log
+            kernel/.config
+          if-no-files-found: ignore
+          retention-days: 7
