@@ -5,13 +5,9 @@ on:
     branches:
       - main
       - feat/kebab-anykernel3
-    paths:
-      - '.github/workflows/Build-kebab-SukiSU.yml'
   pull_request:
     branches:
       - main
-    paths:
-      - '.github/workflows/Build-kebab-SukiSU.yml'
   workflow_dispatch:
     inputs:
       kernel_branch:
