@@ -1,4 +1,4 @@
-name: Build OnePlus 8T SukiSU + SUSFS (4.19)
+name: Build OnePlus 8T OxygenOS 14 SukiSU + SUSFS (4.19)
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       kernel_branch:
         description: "OnePlusOSS kernel source branch"
         required: true
-        default: "oneplus/sm8250_t_13.1_op8"
+        default: "oneplus/sm8250_u_14.0.0_op8t"
         type: string
       defconfig:
         description: "Kernel defconfig"
