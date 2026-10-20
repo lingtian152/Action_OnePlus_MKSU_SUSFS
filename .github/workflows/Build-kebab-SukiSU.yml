@@ -60,21 +60,23 @@ jobs:
         run: |
           git clone --depth=1 --branch kernel-4.19 https://gitlab.com/simonpunk/susfs4ksu.git susfs
           test -f susfs/kernel_patches/50_add_susfs_in_kernel-4.19.patch
-          cp susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch KernelSU/
-          (cd KernelSU && patch --forward -p1 < 10_enable_susfs_for_ksu.patch)
+          # SukiSU Ultra's builtin branch already includes the KernelSU-side SUSFS
+          # integration. The legacy susfs4ksu patch also contains obsolete flat-layout
+          # KernelSU hunks, so apply only Linux-kernel hunks (fs/, include/, etc.).
           cp susfs/kernel_patches/fs/susfs.c fs/
           cp susfs/kernel_patches/include/linux/susfs.h include/linux/
           cp susfs/kernel_patches/include/linux/sus_su.h include/linux/
-          cp susfs/kernel_patches/kernelsu/sus_su.c KernelSU/kernel/
-          cp susfs/kernel_patches/50_add_susfs_in_kernel-4.19.patch .
-          # The SUSFS patch mixes Linux-kernel paths (fs/, include/) with KernelSU paths (kernel/*).
-          # Redirect the latter to the embedded SukiSU KernelSU tree before applying from kernel root.
-          sed -i -E \
-            -e 's@^(diff --git a/)kernel/@\1KernelSU/kernel/@' \
-            -e 's@( b/)kernel/@\1KernelSU/kernel/@' \
-            -e 's@^(--- a/|\+\+\+ b/)kernel/@\1KernelSU/kernel/@' \
-            50_add_susfs_in_kernel-4.19.patch
-          patch --batch --forward -p1 < 50_add_susfs_in_kernel-4.19.patch
+          awk '
+            /^diff --git / {
+              skip = ($0 ~ /^diff --git a\/kernel\//)
+            }
+            !skip { print }
+          ' susfs/kernel_patches/50_add_susfs_in_kernel-4.19.patch > susfs-kernel-only.patch
+          if grep -q '^diff --git a/kernel/' susfs-kernel-only.patch; then
+            echo "Legacy KernelSU hunks were not fully filtered" >&2
+            exit 1
+          fi
+          patch --batch --forward -p1 < susfs-kernel-only.patch
       - name: Configure kernel
         working-directory: kernel
         env:
