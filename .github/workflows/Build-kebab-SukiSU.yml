@@ -61,7 +61,7 @@ jobs:
           git clone --depth=1 --branch kernel-4.19 https://gitlab.com/simonpunk/susfs4ksu.git susfs
           test -f susfs/kernel_patches/50_add_susfs_in_kernel-4.19.patch
           cp susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch KernelSU/
-          patch --forward -p1 < KernelSU/10_enable_susfs_for_ksu.patch
+          (cd KernelSU && patch --forward -p1 < 10_enable_susfs_for_ksu.patch)
           cp susfs/kernel_patches/fs/susfs.c fs/
           cp susfs/kernel_patches/include/linux/susfs.h include/linux/
           cp susfs/kernel_patches/include/linux/sus_su.h include/linux/
