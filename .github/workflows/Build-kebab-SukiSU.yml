@@ -1,6 +1,17 @@
 name: Build OnePlus 8T OxygenOS 14 SukiSU + SUSFS (4.19)
 
 on:
+  push:
+    branches:
+      - main
+      - feat/kebab-anykernel3
+    paths:
+      - '.github/workflows/Build-kebab-SukiSU.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/Build-kebab-SukiSU.yml'
   workflow_dispatch:
     inputs:
       kernel_branch:
@@ -29,7 +40,7 @@ jobs:
           sudo apt-get install -y bc bison build-essential ccache curl flex git libelf-dev libssl-dev lz4 python3 zip zstd
       - name: Checkout kernel source
         env:
-          KERNEL_BRANCH: ${{ inputs.kernel_branch }}
+          KERNEL_BRANCH: ${{ inputs.kernel_branch || 'oneplus/sm8250_u_14.0.0_op8t' }}
         run: |
           git clone --depth=1 --branch "$KERNEL_BRANCH" https://github.com/OnePlusOSS/android_kernel_oneplus_sm8250.git kernel
           test -f kernel/Makefile
@@ -64,7 +75,7 @@ jobs:
       - name: Configure kernel
         working-directory: kernel
         env:
-          DEFCONFIG: ${{ inputs.defconfig }}
+          DEFCONFIG: ${{ inputs.defconfig || 'vendor/kona-perf_defconfig' }}
         run: |
           test -f "arch/arm64/configs/$DEFCONFIG"
           export ARCH=arm64
