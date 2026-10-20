@@ -70,7 +70,9 @@ jobs:
           # The SUSFS patch mixes Linux-kernel paths (fs/, include/) with KernelSU paths (kernel/*).
           # Redirect the latter to the embedded SukiSU KernelSU tree before applying from kernel root.
           sed -i -E \
-            -e 's@^(diff --git a/|--- a/|\+\+\+ b/)kernel/@\1KernelSU/kernel/@' \
+            -e 's@^(diff --git a/)kernel/@\1KernelSU/kernel/@' \
+            -e 's@( b/)kernel/@\1KernelSU/kernel/@' \
+            -e 's@^(--- a/|\+\+\+ b/)kernel/@\1KernelSU/kernel/@' \
             50_add_susfs_in_kernel-4.19.patch
           patch --batch --forward -p1 < 50_add_susfs_in_kernel-4.19.patch
       - name: Configure kernel
