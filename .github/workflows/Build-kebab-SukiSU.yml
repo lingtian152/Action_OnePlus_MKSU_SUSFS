@@ -67,7 +67,12 @@ jobs:
           cp susfs/kernel_patches/include/linux/sus_su.h include/linux/
           cp susfs/kernel_patches/kernelsu/sus_su.c KernelSU/kernel/
           cp susfs/kernel_patches/50_add_susfs_in_kernel-4.19.patch .
-          patch --forward -p1 < 50_add_susfs_in_kernel-4.19.patch
+          # The SUSFS patch mixes Linux-kernel paths (fs/, include/) with KernelSU paths (kernel/*).
+          # Redirect the latter to the embedded SukiSU KernelSU tree before applying from kernel root.
+          sed -i -E \
+            -e 's@^(diff --git a/|--- a/|\+\+\+ b/)kernel/@\1KernelSU/kernel/@' \
+            50_add_susfs_in_kernel-4.19.patch
+          patch --batch --forward -p1 < 50_add_susfs_in_kernel-4.19.patch
       - name: Configure kernel
         working-directory: kernel
         env:
